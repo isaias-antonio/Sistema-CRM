@@ -1,184 +1,174 @@
 package com.example.aplicacaomovel.ui.theme.screens
 
+
+import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
-import com.example.aplicacaomovel.authentication.FirebaseAuthRepository
-import com.example.aplicacaomovel.components.DontHaveAccountRow
-import com.example.aplicacaomovel.ui.theme.AlegreyaFontFamily
-import com.example.aplicacaomovel.ui.theme.AlegreyaSansFontFamily
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
-import kotlin.coroutines.suspendCoroutine
-
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import com.example.aplicacaomovel.database.AppDatabase
+import kotlinx.coroutines.CoroutineScope
 
 @Composable
-fun UserLoginScreen(
-    navController: NavController,
-    firebaseAuthRepository: FirebaseAuthRepository = FirebaseAuthRepository()
-) {
+fun UserLoginScreen(navController: NavController) {
+    val context = LocalContext.current
+    val database = remember {
+        try {
+            // inicializar o banco de dados
+            AppDatabase.getDatabase(context)
+        } catch (e: Exception) {
+            Log.e("UserLoginScreen", "Erro ao inicializar o banco de dados: ${e.message}")
+            null
+        }
+    }
+    val userDao = remember {
+        database?.userDao()
+    }
 
-    var email by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf("") }
-    var successMessage by remember { mutableStateOf("") }
-    val coroutineScope = rememberCoroutineScope()
 
-    Surface(
-        color = Color.DarkGray,
-        modifier = Modifier.fillMaxSize(),
-    ){
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.Top,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
+    fun validateCredentials(username: String, password: String) {
+        // Verificando se o userDao é nulo
+        if (userDao == null) {
+            Log.e("UserLoginScreen", "Erro: userDao é nulo")
+            errorMessage = "Erro ao acessar o banco de dados"
+            return
+        }
 
-            Spacer(modifier = Modifier.height(150.dp))
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                Log.d("UserLoginScreen", "Validando usuário: $username")
+                val user = userDao.getUserByUsername(username)
+                if (user == null) {
+                    Log.d("UserLoginScreen", "Usuário não encontrado")
+                    withContext(Dispatchers.Main) {
+                        errorMessage = "Usuário não encontrado"
+                    }
+                    return@launch
+                }
 
-            Text(text = "Login",
-                style = TextStyle(
-                    fontSize = 40.sp,
-                    fontFamily = AlegreyaFontFamily,
-                    fontWeight = FontWeight(800),
-                    color = Color.White
-                ),
-            )
+                val isPasswordValid = user.password == password
+                Log.d("UserLoginScreen", "Senha válida: $isPasswordValid")
 
-            Spacer(modifier = Modifier.height(20.dp))
-
-            TextField(
-                value = email,
-                onValueChange = { email = it },
-                label = { Text("Email") },
-                modifier = Modifier.fillMaxWidth(),
-                colors = TextFieldDefaults.colors(
-                    unfocusedTextColor = Color.White,
-                    focusedTextColor = Color.White,
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    focusedLabelColor = Color.White,
-                    unfocusedLabelColor = Color.White,
-                    focusedIndicatorColor = Color.White,
-                    unfocusedIndicatorColor = Color.White
-                )
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            TextField(
-                value = password,
-                onValueChange = { password = it },
-                label = { Text("Senha") },
-                visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier.fillMaxWidth(),
-                colors = TextFieldDefaults.colors(
-                    unfocusedTextColor = Color.White,
-                    focusedTextColor = Color.White,
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    focusedLabelColor = Color.White,
-                    unfocusedLabelColor = Color.White,
-                    focusedIndicatorColor = Color.White,
-                    unfocusedIndicatorColor = Color.White
-                )
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Button(
-                onClick = {
-                    if (email.isBlank() || password.isBlank()) {
-                        errorMessage = "Todos os campos são obrigatórios"
-                        successMessage = ""
-                        coroutineScope.launch {
-                            delay(3000)
-                            errorMessage = ""
+                withContext(Dispatchers.Main) {
+                    if (isPasswordValid) {
+                        errorMessage = "Credenciais válidas!"
+                        try {
+                            // Navegação dentro de try-catch
+                            navController.navigate("homepage")
+                        } catch (e: Exception) {
+                            Log.e("UserLoginScreen", "Erro na navegação: ${e.message}")
+                            errorMessage = "Erro ao navegar para a homepage"
                         }
                     } else {
-                        coroutineScope.launch {
-                            try {
-                                firebaseAuthRepository.loginUser(email, password)
-                                successMessage = "Login efetuado com êxito!"
-                                errorMessage = ""
-                                delay(3000)
-                                navController.navigate("homepage")
-                                successMessage = ""
-                            } catch (e: Exception) {
-                                errorMessage = "Email ou Senha errada!"
-                                successMessage = ""
-                                delay(3000)
-                                email = ""
-                                password = ""
-                                errorMessage = ""
-                            }
-                        }
+                        errorMessage = "Usuário ou senha incorretos!"
                     }
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Entrar",
-                    style = TextStyle(
-                        fontSize = 22.sp,
-                        fontFamily = AlegreyaSansFontFamily,
-                        fontWeight = FontWeight(500),
-                        color = Color.White
-                    )
-                )
-            }
-            DontHaveAccountRow(
-                onSignUpTap = {
-                    navController.navigate("signup")
                 }
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            if (errorMessage.isNotBlank()) {
-                Text(text = errorMessage, color = MaterialTheme.colorScheme.error)
-            }
-
-            if (successMessage.isNotBlank()) {
-                Text(text = successMessage, color = MaterialTheme.colorScheme.primary)
+            } catch (e: Exception) {
+                Log.e("UserLoginScreen", "Erro ao acessar a base de dados: ${e.message}")
+                withContext(Dispatchers.Main) {
+                    errorMessage = "Erro ao acessar a base de dados: ${e.message}"
+                }
             }
         }
     }
 
-}
+    Column(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(text = "Login", style = MaterialTheme.typography.headlineLarge)
+        Spacer(modifier = Modifier.height(16.dp))
 
-suspend fun <T> com.google.android.gms.tasks.Task<T>.toSuspendResult(): T {
-    return suspendCoroutine { cont ->
-        addOnCompleteListener { task ->
-            if (task.isSuccessful) {
-                cont.resume(task.result)
+        OutlinedTextField(
+            value = username,
+            onValueChange = { username = it },
+            label = { Text("Usuário") },
+            singleLine = true
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+
+        OutlinedTextField(
+            value = password,
+            onValueChange = { password = it },
+            visualTransformation = PasswordVisualTransformation(),
+            label = { Text("Senha") },
+            singleLine = true
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(onClick = {
+            if (username.isBlank() || password.isBlank()) {
+                errorMessage = "Preencha todos os campos"
             } else {
-                cont.resumeWithException(task.exception ?: Exception("Unknown error occurred"))
+                validateCredentials(username, password)
             }
+        }) {
+            Text("Entrar")
+        }
+
+        if (errorMessage.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(text = errorMessage, color = MaterialTheme.colorScheme.error)
         }
     }
 }
-
 
 @Preview(showBackground = true, widthDp = 320, heightDp = 640)
 @Composable
-fun LoginScreenPreview() {
-    UserLoginScreen(rememberNavController())
+fun PreviewLoginScreen() {
+    val navController = rememberNavController()
+    UserLoginScreen(navController = navController)
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
